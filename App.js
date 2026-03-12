@@ -1,232 +1,252 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Image, TextInput, Button, FlatList, Pressable} from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';  
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useState, useEffect } from 'react';
-import {collection, addDoc, deleteDoc, doc, updateDoc, arrayUnion, getDoc} from 'firebase/firestore';
-import {db, storage} from './firebase';
-import {ref, uploadBytes, getDownloadURL} from 'firebase/storage';
-import {useCollection} from 'react-firebase-hooks/firestore';
-import * as ImagePicker from 'expo-image-picker';
-import styles from './style';
-
- 
+import { StatusBar } from "expo-status-bar";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  TextInput,
+  Button,
+  FlatList,
+  Pressable,
+} from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useState, useEffect } from "react";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  arrayUnion,
+  getDoc,
+} from "firebase/firestore";
+import { db, storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useCollection } from "react-firebase-hooks/firestore";
+import * as ImagePicker from "expo-image-picker";
+import styles from "./style";
 
 export default function App() {
   const Stack = createNativeStackNavigator();
 
   return (
-      <NavigationContainer>
-        <Stack.Navigator initialRouteName="Home">
-          <Stack.Screen 
-          name="Home" 
-          component={HomeScreen} />
-          <Stack.Screen 
-          name="Notebook"
-          component={NotebookScreen} />
-
-        </Stack.Navigator>
-      </NavigationContainer>
-    );
-  
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Home">
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Notebook" component={NotebookScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
 }
 
 function HomeScreen({ navigation, route }) {
-  
-  function btnpress(){
-    navigation.navigate('Notebook');
+  function btnpress() {
+    navigation.navigate("Notebook");
   }
 
-  const [showImage, setShowImage]=useState(false);
-  const [name, setName] = useState('');
+  const [showImage, setShowImage] = useState(false);
+  const [name, setName] = useState("");
   return (
     <View style={styles.container}>
-      <Image
-        style={styles.imagestyle}
-        source={require('./logo.png')}
-      />
+      <Image style={styles.imagestyle} source={require("./logo.png")} />
       <View style={styles.inputContainer}>
-        <TextInput 
-          style={styles.TextInput} 
-          placeholder='Insert name'
+        <TextInput
+          style={styles.TextInput}
+          placeholder="Insert name"
           value={name}
           onChangeText={setName}
         />
-        <Button style ={styles.button}
-        title='Press me!'
-        onPress={()=>setShowImage(!showImage)}
+        <Button
+          style={styles.button}
+          title="Press me!"
+          onPress={() => setShowImage(!showImage)}
         ></Button>
       </View>
-      {name !== '' && (
-        <Text style={styles.greeting}>Hello {name}!</Text>
-      )}
+      {name !== "" && <Text style={styles.greeting}>Hello {name}!</Text>}
       {showImage && (
-        <Image
-          style={styles.imagePop}
-          source={require('./hotdog.png')}
-        />
+        <Image style={styles.imagePop} source={require("./hotdog.png")} />
       )}
-      <Button style={styles.button} title="Go to Notebook" 
-      onPress={btnpress} 
-      />
+      <Button style={styles.button} title="Go to Notebook" onPress={btnpress} />
       <StatusBar style="auto" />
     </View>
   );
 }
 
 function NotebookScreen() {
-  const [deleteId, setDeleteId] = useState('');
-  const [noteText, setNoteText] = useState('');
+  const [deleteId, setDeleteId] = useState("");
+  const [noteText, setNoteText] = useState("");
   const [imagePath, setImagePath] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
-  const [values, loading, error] = useCollection(collection(db, 'notes'));
-  const notes = values?.docs.map((doc)=>({...doc.data(), id:doc.id})) ?? [];
+  const [values, loading, error] = useCollection(collection(db, "notes"));
+  const notes =
+    values?.docs.map((doc) => ({ ...doc.data(), id: doc.id })) ?? [];
   const [imagePaths, setImagePaths] = useState({});
 
   async function saveNoteToFirestore() {
-    await addDoc(collection(db,'notes'),{
-      text: noteText
-    })
-    setNoteText('')
+    await addDoc(collection(db, "notes"), {
+      text: noteText,
+    });
+    setNoteText("");
   }
 
   async function deleteNoteFromFirestore() {
     try {
-      await deleteDoc(doc(db, 'notes', deleteId));
-      console.log('Note deleted from Firestore!');
+      await deleteDoc(doc(db, "notes", deleteId));
+      console.log("Note deleted from Firestore!");
     } catch (error) {
-      console.error('Error deleting note from Firestore: ', error);
+      console.error("Error deleting note from Firestore: ", error);
     }
   }
   function renderItem({ item }) {
-  return (
-    <View style={styles.noteRow}>
+    return (
+      <View style={styles.noteRow}>
+        <Text style={styles.noteText}>{item.text}</Text>
 
-      <Text style={styles.noteText}>{item.text}</Text>
+        {(imagePaths[item.id] ?? []).map((url, index) => (
+          <Image key={index} source={{ uri: url }} style={styles.noteImage} />
+        ))}
 
-      {(imagePaths[item.id] ?? []).map((url, index) => (
-      <Image
-        key={index}
-        source={{ uri: url }}
-        style={styles.noteImage}
-      />
-    ))}
+        <Pressable
+          onPress={async () => {
+            const uri = await pickImage();
+            if (uri) {
+              await uploadImageWithUri(uri, item.id);
+            }
+          }}
+        >
+          <Text>Upload Image</Text>
+        </Pressable>
 
-      <Pressable
-        onPress={async () => {
-          const uri = await pickImage();
-          if (uri) {
-          await uploadImageWithUri(uri, item.id); 
-          }
-        }}
-      >
-        <Text>Upload Image</Text>
-      </Pressable>
+        <Pressable
+          onPress={async () => {
+            const uri = await launchCamera();
+            if (uri) {
+              await uploadImageWithUri(uri, item.id);
+            }
+          }}
+        >
+          <Text>Take Photo</Text>
+        </Pressable>
 
-      <Pressable
-        style={styles.rowButton}
-        onPress={() => deleteDoc(doc(db, "notes", item.id))}
-      >
-        <Text>Delete</Text>
-      </Pressable>
-
-    </View>
-  );
-}
-
-  async function pickImage() {
-  let result = await ImagePicker.launchImageLibraryAsync({
-    allowsEditing: true,
-  });
-
-  if (!result.canceled) {
-    return result.assets[0].uri;
+        <Pressable
+          style={styles.rowButton}
+          onPress={() => deleteDoc(doc(db, "notes", item.id))}
+        >
+          <Text>Delete</Text>
+        </Pressable>
+      </View>
+    );
   }
-}
+  async function launchCamera() {
+    const result = await ImagePicker.requestCameraPermissionsAsync();
 
-  async function uploadImageWithUri(uri, noteId) {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    if (!result.granted) {
+      alert("No permission for camera");
+      return;
+    }
 
-    const filename = noteId + "_" + Date.now() + ".jpg";
-    const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob);
-
-    const noteRef = doc(db, "notes", noteId);
-    await updateDoc(noteRef, {
-      images: arrayUnion(filename)   
+    const response = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 1,
     });
 
-    await downloadImages(noteId);
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-
-async function loadImageFromFirebase() {
-  getDownloadURL(ref(storage, 'myImage.jpg')).then((url) => {
-    setImagePath(url);
-  });
-}
-
-async function downloadImages(noteId) {
-  try {
-    const noteDoc = await getDoc(doc(db, "notes", noteId));
-    const filenames = noteDoc.data()?.images ?? [];
-
-    const urls = await Promise.all(
-      filenames.map(filename => getDownloadURL(ref(storage, filename)))
-    );
-
-    setImagePaths(paths => ({ ...paths, [noteId]: urls }));
-  } catch (error) {
-    console.log("Error loading images:", error);
-  }
-}
- useEffect(() => {
-  notes.forEach(note => {
-    if (!imagePaths[note.id]) {
-      downloadImages(note.id);
+    if (!response.canceled) {
+      return response.assets[0].uri;
     }
-  });
-}, [notes]);
+  }
+  async function pickImage() {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+    });
 
+    if (!result.canceled) {
+      return result.assets[0].uri;
+    }
+  }
 
+  async function uploadImageWithUri(uri, noteId) {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const filename = noteId + "_" + Date.now() + ".jpg";
+      const storageRef = ref(storage, filename);
+      await uploadBytes(storageRef, blob);
+
+      const noteRef = doc(db, "notes", noteId);
+      await updateDoc(noteRef, {
+        images: arrayUnion(filename),
+      });
+
+      await downloadImages(noteId);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async function loadImageFromFirebase() {
+    getDownloadURL(ref(storage, "myImage.jpg")).then((url) => {
+      setImagePath(url);
+    });
+  }
+
+  async function downloadImages(noteId) {
+    try {
+      const noteDoc = await getDoc(doc(db, "notes", noteId));
+      const filenames = noteDoc.data()?.images ?? [];
+
+      const urls = await Promise.all(
+        filenames.map((filename) => getDownloadURL(ref(storage, filename))),
+      );
+
+      setImagePaths((paths) => ({ ...paths, [noteId]: urls }));
+    } catch (error) {
+      console.log("Error loading images:", error);
+    }
+  }
+  useEffect(() => {
+    notes.forEach((note) => {
+      if (!imagePaths[note.id]) {
+        downloadImages(note.id);
+      }
+    });
+  }, [notes]);
 
   return (
     <View style={styles.intro}>
       <Text style={styles.introText}>Welcome to the notebook! </Text>
       <TextInput
-      style={styles.TextInput}
-      placeholder="Enter document id to delete..."
-      value={deleteId}
-      onChangeText={setDeleteId}
-/>
-      <Button style={styles.saveButton} title="Delete note" 
-      onPress={() => deleteNoteFromFirestore({deleteId})} 
+        style={styles.TextInput}
+        placeholder="Enter document id to delete..."
+        value={deleteId}
+        onChangeText={setDeleteId}
+      />
+      <Button
+        style={styles.saveButton}
+        title="Delete note"
+        onPress={() => deleteNoteFromFirestore({ deleteId })}
       />
 
-
-      <TextInput style={styles.TextInput} 
-      placeholder="Enter your note here..." 
-      value={noteText}
-      onChangeText={setNoteText}
+      <TextInput
+        style={styles.TextInput}
+        placeholder="Enter your note here..."
+        onChangeText={setNoteText}
       />
-      <Button style={styles.saveButton} title="Save Note" 
-      onPress={() => saveNoteToFirestore({name: noteText})} 
+      <Button
+        style={styles.saveButton}
+        title="Save Note"
+        onPress= {saveNoteToFirestore}
       />
       <FlatList
         data={notes}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
       />
-    <Pressable onPress={loadImageFromFirebase}>
-      <Text>Load Image From Firebase</Text>
-    </Pressable>
-    
+
+      <Pressable onPress={loadImageFromFirebase}>
+        <Text>Load Image From Firebase</Text>
+      </Pressable>
     </View>
-    
   );
-} 
+}
