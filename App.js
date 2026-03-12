@@ -2,18 +2,19 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, Image, TextInput, Button, FlatList, Pressable} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';  
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useState } from 'react';
-import {collection, addDoc, deleteDoc,} from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import {collection, addDoc, deleteDoc, doc, updateDoc, arrayUnion, getDoc} from 'firebase/firestore';
 import {db, storage} from './firebase';
+import {ref, uploadBytes, getDownloadURL} from 'firebase/storage';
 import {useCollection} from 'react-firebase-hooks/firestore';
 import * as ImagePicker from 'expo-image-picker';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import styles from './style';
+
  
 
 export default function App() {
   const Stack = createNativeStackNavigator();
-  const [values, loading, error] = useCollection(collection(db, 'notes'));
-  const data = values?.docs.map((doc)=>({...doc.data(), id:doc.id}));
+
   return (
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Home">
@@ -76,21 +77,17 @@ function HomeScreen({ navigation, route }) {
 function NotebookScreen() {
   const [deleteId, setDeleteId] = useState('');
   const [noteText, setNoteText] = useState('');
-  const [notes, setNotes] = useState([]);
   const [imagePath, setImagePath] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
+  const [values, loading, error] = useCollection(collection(db, 'notes'));
+  const notes = values?.docs.map((doc)=>({...doc.data(), id:doc.id})) ?? [];
+  const [imagePaths, setImagePaths] = useState({});
 
-
-  async function saveNoteToFirestore(note) {
-    try {
-      await addDoc(collection(db, 'notes'), {
-        text: note.name,
-      });
-      setNoteText('');
-      console.log('Note saved to Firestore!');
-    } catch (error) {
-      console.error('Error saving note to Firestore: ', error);
-    }
+  async function saveNoteToFirestore() {
+    await addDoc(collection(db,'notes'),{
+      text: noteText
+    })
+    setNoteText('')
   }
 
   async function deleteNoteFromFirestore() {
@@ -101,47 +98,103 @@ function NotebookScreen() {
       console.error('Error deleting note from Firestore: ', error);
     }
   }
-  function renderItem({item}) {
-    return (
-      <Button title={item.name} 
-      onPress={() => alert(item.name)} />
-    );
-  }
+  function renderItem({ item }) {
+  return (
+    <View style={styles.noteRow}>
+
+      <Text style={styles.noteText}>{item.text}</Text>
+
+      {(imagePaths[item.id] ?? []).map((url, index) => (
+      <Image
+        key={index}
+        source={{ uri: url }}
+        style={styles.noteImage}
+      />
+    ))}
+
+      <Pressable
+        onPress={async () => {
+          const uri = await pickImage();
+          if (uri) {
+          await uploadImageWithUri(uri, item.id); 
+          }
+        }}
+      >
+        <Text>Upload Image</Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.rowButton}
+        onPress={() => deleteDoc(doc(db, "notes", item.id))}
+      >
+        <Text>Delete</Text>
+      </Pressable>
+
+    </View>
+  );
+}
 
   async function pickImage() {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-    })
-    if (!result.canceled) {
-      setImagePath(result.assets[0].uri);
-      console.log("billede ok!")
-    }
-  }
+  let result = await ImagePicker.launchImageLibraryAsync({
+    allowsEditing: true,
+  });
 
-  async function uploadImage() {
+  if (!result.canceled) {
+    return result.assets[0].uri;
+  }
+}
+
+  async function uploadImageWithUri(uri, noteId) {
   try {
-    const response = await fetch(imagePath);
+    const response = await fetch(uri);
     const blob = await response.blob();
 
-    const storageRef = ref(storage, 'myImage.jpg');
-
+    const filename = noteId + "_" + Date.now() + ".jpg";
+    const storageRef = ref(storage, filename);
     await uploadBytes(storageRef, blob);
-    console.log('Image uploaded successfully!');
 
-    const url = await getDownloadURL(storageRef);
-    setDownloadUrl(url);
+    const noteRef = doc(db, "notes", noteId);
+    await updateDoc(noteRef, {
+      images: arrayUnion(filename)   
+    });
 
+    await downloadImages(noteId);
   } catch (error) {
     console.log(error);
   }
 }
+
+
 async function loadImageFromFirebase() {
   getDownloadURL(ref(storage, 'myImage.jpg')).then((url) => {
     setImagePath(url);
   });
 }
 
- 
+async function downloadImages(noteId) {
+  try {
+    const noteDoc = await getDoc(doc(db, "notes", noteId));
+    const filenames = noteDoc.data()?.images ?? [];
+
+    const urls = await Promise.all(
+      filenames.map(filename => getDownloadURL(ref(storage, filename)))
+    );
+
+    setImagePaths(paths => ({ ...paths, [noteId]: urls }));
+  } catch (error) {
+    console.log("Error loading images:", error);
+  }
+}
+ useEffect(() => {
+  notes.forEach(note => {
+    if (!imagePaths[note.id]) {
+      downloadImages(note.id);
+    }
+  });
+}, [notes]);
+
+
+
   return (
     <View style={styles.intro}>
       <Text style={styles.introText}>Welcome to the notebook! </Text>
@@ -167,16 +220,8 @@ async function loadImageFromFirebase() {
       <FlatList
         data={notes}
         renderItem={renderItem}
-        keyExtractor={item => item.key.toString()}
+        keyExtractor={item => item.id}
       />
-    <Image source={{uri:imagePath}} style={styles.imagestyle}>
-    </Image>
-    <Pressable onPress={pickImage}>
-      <Text>Pick Image</Text>
-    </Pressable>
-    <Pressable onPress={uploadImage}>
-      <Text>Upload Image</Text>
-    </Pressable>
     <Pressable onPress={loadImageFromFirebase}>
       <Text>Load Image From Firebase</Text>
     </Pressable>
@@ -185,64 +230,3 @@ async function loadImageFromFirebase() {
     
   );
 } 
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#97a098",
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  intro:{
-    fontSize: 33,
-    color: '#fff',
-    marginBottom: 20,
-    fontWeight: 'bold',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 200,
-  },
-    introText:{
-    fontSize: 34,
-    color: '#261515',
-    marginBottom: 20,
-    fontWeight: 'bold',
-  },
-
-  imagestyle:{
-    width: 200,
-    height: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputContainer:{
-    flexDirection: 'row',
-  },
-  TextInput:{
-    backgroundColor:"#fff",
-    marginRight:5,
-    padding:5,
-    flexDirection: 'row',
-  },
-  button:{
-    backgroundColor: "#fff",
-    borderColor: "#0a1b9b5f"
-  },
-  imagePop:{
-    height:50,
-    width: 50,
-    resizeMode: 'contain'
-  },
-  greeting:{
-    fontSize: 24,
-    color: '#fff',
-    marginTop: 20,
-    fontWeight: 'bold'
-  },
-  saveButton:{
-    backgroundColor: "#fff",
-    borderColor: "#0a1b9b5f",
-    marginTop: 10,
-    flexDirection: 'row',
-  },
-});
