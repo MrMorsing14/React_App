@@ -1,42 +1,45 @@
-import { StatusBar } from "expo-status-bar";
-import {
-  StyleSheet,
-  Text,
-  View,
-  Image,
-  TextInput,
-  Button,
-  FlatList,
-  Pressable,
-} from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useState, useEffect } from "react";
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  updateDoc,
-  arrayUnion,
-  getDoc,
-} from "firebase/firestore";
-import { db, storage } from "./firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { useCollection } from "react-firebase-hooks/firestore";
-import * as ImagePicker from "expo-image-picker";
-import styles from "./style";
+import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, Text, View, Image, TextInput, Button, FlatList, Pressable} from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';  
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useState } from 'react';
+import {collection, addDoc, deleteDoc,} from 'firebase/firestore';
+import {db, storage} from './firebase';
+import {useCollection} from 'react-firebase-hooks/firestore';
+import * as ImagePicker from 'expo-image-picker';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import MapView from 'react-native-maps';
+ 
 
 export default function App() {
   const Stack = createNativeStackNavigator();
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Notebook" component={NotebookScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Home">
+          <Stack.Screen 
+          name="Home" 
+          component={HomeScreen} />
+          <Stack.Screen 
+          name="Notebook"
+          component={NotebookScreen} />
+          <Stack.Screen 
+          name="maps"
+          component={MapsScreen} />
+
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  
+}
+
+function MapsScreen() {
+  return (
+    <View style={{ flex: 1 }}>
+      <MapView
+        style={{width: '100%', height: '100%'}}
+      />
+    </View>
   );
 }
 
