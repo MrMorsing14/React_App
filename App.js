@@ -2,14 +2,22 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, Image, TextInput, Button, FlatList, Pressable} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';  
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useState } from 'react';
-import {collection, addDoc, deleteDoc,} from 'firebase/firestore';
+import { useState, useEffect} from 'react';
+import { 
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  arrayUnion,
+  getDoc
+} from "firebase/firestore";
 import {db, storage} from './firebase';
 import {useCollection} from 'react-firebase-hooks/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import MapView from 'react-native-maps';
- 
+import MapView, {Marker} from 'react-native-maps';
+import styles from './style'; 
 
 export default function App() {
   const Stack = createNativeStackNavigator();
@@ -24,7 +32,7 @@ export default function App() {
           name="Notebook"
           component={NotebookScreen} />
           <Stack.Screen 
-          name="maps"
+          name="Maps"
           component={MapsScreen} />
 
         </Stack.Navigator>
@@ -34,18 +42,46 @@ export default function App() {
 }
 
 function MapsScreen() {
+  const [markers, setMarkers] = useState([]);
+  const region = {
+    latitude: 55,
+    longitude: 12,
+    latitudeDelta: 2,
+    longitudeDelta: 2
+  };
+
+  function handleLongPress(event) {
+    const { coordinate } = event.nativeEvent; //hent kun coordiante objektet fra event.nativeEvent
+    setMarkers(prev => [...prev, coordinate]); //opdater marker state ved at tilføje det nye coordinate objekt
+  }
+
+
   return (
     <View style={{ flex: 1 }}>
       <MapView
         style={{width: '100%', height: '100%'}}
-      />
+        region={region}
+        onLongPress={handleLongPress}
+        >
+        {markers.map((marker, index) => (
+          <Marker
+            key={index}
+            coordinate={marker}
+            title="go there"
+            description="good view"
+          />
+        ))}
+      </MapView>
     </View>
   );
 }
 
 function HomeScreen({ navigation, route }) {
-  function btnpress() {
+  function btnpressNotebook() {
     navigation.navigate("Notebook");
+  }
+  function btnpressMaps() {
+    navigation.navigate("Maps");
   }
 
   const [showImage, setShowImage] = useState(false);
@@ -70,8 +106,9 @@ function HomeScreen({ navigation, route }) {
       {showImage && (
         <Image style={styles.imagePop} source={require("./hotdog.png")} />
       )}
-      <Button style={styles.button} title="Go to Notebook" onPress={btnpress} />
+      <Button style={styles.button} title="Go to Notebook" onPress={btnpressNotebook} />
       <StatusBar style="auto" />
+      <Button style={styles.button} title="Go to Maps" onPress={btnpressMaps} />
     </View>
   );
 }
@@ -228,8 +265,7 @@ function NotebookScreen() {
       <Button
         style={styles.saveButton}
         title="Delete note"
-        onPress={() => deleteNoteFromFirestore({ deleteId })}
-      />
+        onPress={() => deleteNoteFromFirestore()}      />
 
       <TextInput
         style={styles.TextInput}
